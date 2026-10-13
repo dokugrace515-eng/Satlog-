@@ -1,0 +1,59 @@
+name: Build Satlog APK
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [ "main" ]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Get Satlog files
+        uses: actions/checkout@v4
+
+      - name: Extract Android project
+        run: |
+          mkdir -p satlog-build
+          unzip -o Satlog-Android-Prototype.zip -d satlog-build
+          echo "Extracted files:"
+          find satlog-build -maxdepth 3 -type f | sort
+
+      - name: Set up Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - name: Find project and build APK
+        run: |
+          GRADLEW=$(find satlog-build -type f -name gradlew | head -1)
+
+          if [ -z "$GRADLEW" ]; then
+            echo "ERROR: gradlew was not found inside the ZIP."
+            echo "The ZIP is not a complete buildable Android Gradle project."
+            exit 1
+          fi
+
+          PROJECT_DIR=$(dirname "$GRADLEW")
+          cd "$PROJECT_DIR"
+
+          chmod +x gradlew
+          ./gradlew assembleDebug
+
+      - name: Collect APK
+        run: |
+          mkdir -p apk-output
+          find satlog-build -type f -name "*.apk" -exec cp {} apk-output/ \;
+
+          if ! find apk-output -type f -name "*.apk" | grep -q .; then
+            echo "ERROR: Build finished without producing an APK."
+            exit 1
+          fi
+
+      - name: Upload Satlog APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: Satlog-APK
+          path: apk-output/*.apk
